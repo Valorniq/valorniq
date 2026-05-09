@@ -1,0 +1,92 @@
+{
+  "entities": {
+    "Lead": {
+      "title": "Lead",
+      "description": "A potential customer lead",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "source": { "type": "string" },
+        "status": { "type": "string", "enum": ["new", "contacted", "qualified", "lost"] },
+        "estimatedValue": { "type": "number" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "status", "ownerId"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "A converted business customer",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "address": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "ownerId"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Inventory product item",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "sku": { "type": "string" },
+        "price": { "type": "number" },
+        "stock": { "type": "integer" },
+        "category": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "sku", "price", "stock", "ownerId"]
+    },
+    "SalesOrder": {
+      "title": "Sales Order",
+      "description": "A document recording a sale",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "productId": { "type": "string" }, "quantity": { "type": "integer" }, "price": { "type": "number" } } }
+        },
+        "totalValue": { "type": "number" },
+        "status": { "type": "string", "enum": ["draft", "confirmed", "shipped", "cancelled"] },
+        "ownerId": { "type": "string" },
+        "orderDate": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerId", "items", "totalValue", "status", "ownerId"]
+    },
+    "Activity": {
+      "title": "Activity",
+      "description": "Interactive action related to a lead or customer",
+      "type": "object",
+      "properties": {
+        "relatedId": { "type": "string" },
+        "relatedType": { "type": "string", "enum": ["lead", "customer"] },
+        "type": { "type": "string", "enum": ["note", "call", "email", "meeting"] },
+        "content": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["relatedId", "relatedType", "type", "content", "ownerId"]
+    }
+  },
+  "firestore": {
+    "leads": { "schema": "Lead", "description": "Collection of business leads" },
+    "customers": { "schema": "Customer", "description": "Collection of verified customers" },
+    "products": { "schema": "Product", "description": "Inventory products" },
+    "salesOrders": { "schema": "SalesOrder", "description": "Sales records" },
+    "activities": { "schema": "Activity", "description": "Log of interactions" }
+  }
+}
