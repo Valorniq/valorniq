@@ -1,0 +1,21 @@
+# Valorniq Engineering Rules
+
+- Preserve working behavior unless the current task explicitly changes it.
+- Inspect before editing.
+- Make small, reviewable changes.
+- Never commit secrets.
+- Never put server secrets in `VITE_*` variables.
+- GitHub Pages is frontend-only.
+- Gemini API keys are server-only.
+- Client input is untrusted.
+- Firebase Auth identifies users; Rules/backend enforce access.
+- Never use email as a tenant identifier.
+- Never trust client roles or tenant IDs.
+- Do not claim MFA, RBAC, audit, GAAP/IFRS compliance, SOC 2, or tenant isolation unless the implementation truly enforces it.
+- Keep financial calculations currency-aware and decimal-safe.
+- ARIS must use validated structured commands for future writes.
+- Do not introduce large rewrites without an explicit task.
+- Run `npm run lint` and `npm run build` after meaningful changes.
+- If blocked, explain the blocker instead of guessing.
+- Keep responses short and easy to read. Use a high-school reading level.
+- Final response format: Changed / Checks / Blockers.

@@ -1,157 +1,311 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
-import { ShoppingBag, FileText, CheckCircle2, Clock, XCircle, Search, ShoppingCart } from 'lucide-react';
+import { ShoppingBag, CheckCircle2, Clock, XCircle, Search, Plus, FileText, Download } from 'lucide-react';
 import { SalesOrder, Customer, Product } from '../types';
 
 interface SalesViewProps {
   sales: SalesOrder[];
   customers: Customer[];
   products: Product[];
+  onAddSalesOrder: (order: Omit<SalesOrder, 'id' | 'createdAt'>) => void;
+  onUpdateOrderStatus: (id: string, status: SalesOrder['status']) => void;
+  isDark: boolean;
 }
 
-const SalesView: React.FC<SalesViewProps> = ({ sales, customers, products }) => {
+export default function SalesView({
+  sales,
+  customers,
+  products,
+  onAddSalesOrder,
+  onUpdateOrderStatus,
+  isDark
+}: SalesViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'confirmed' | 'shipped' | 'cancelled'>('all');
+  const [isAddingOrder, setIsAddingOrder] = useState(false);
 
-  const getCustomerName = (id: string) => customers.find(c => c.id === id)?.name || 'Unknown Customer';
+  // New order form inputs
+  const [selectedCustomer, setSelectedCustomer] = useState(customers[0]?.id || '');
+  const [selectedProduct, setSelectedProduct] = useState(products[0]?.id || '');
+  const [orderQuantity, setOrderQuantity] = useState(1);
+
+  const getCustomerName = (id: string) => customers.find(c => c.id === id)?.name || 'Direct Enterprise Client';
+  const getProductName = (id: string) => products.find(p => p.id === id)?.name || 'Product';
   
-  const filteredSales = sales.filter(s => 
-    getCustomerName(s.customerId).toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.id.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredSales = sales.filter(s => {
+    const customerName = s.customerName || getCustomerName(s.customerId);
+    const matchesSearch = customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         s.id.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || s.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   const handleDownloadManifest = (order: SalesOrder) => {
     const manifest = {
       orderId: order.id,
       timestamp: new Date().toISOString(),
-      customer: getCustomerName(order.customerId),
+      customer: order.customerName || getCustomerName(order.customerId),
       items: order.items.map(item => ({
         ...item,
-        productName: products.find(p => p.id === item.productId)?.name || 'Unknown Item'
+        productName: item.productName || getProductName(item.productId)
       })),
       status: order.status,
-      total: order.totalValue
+      totalValue: order.totalValue
     };
     
     const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `order_manifest_${order.id.slice(0, 8)}.json`;
+    link.download = `sales_manifest_${order.id.slice(0, 8)}.json`;
     link.click();
     URL.revokeObjectURL(url);
   };
 
-  return (
-    <div id="sales-view" className="p-8 max-w-7xl mx-auto space-y-8">
-      <div className="flex items-center justify-between">
-        <header className="space-y-1">
-          <h2 className="text-3xl font-bold tracking-tight text-slate-900">Sales History</h2>
-          <p className="text-slate-500 text-sm">Audited transaction records and fulfillment tracking.</p>
-        </header>
+  const handleCreateOrderSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const product = products.find(p => p.id === selectedProduct) || products[0];
+    if (!product) {
+      alert("Please register at least one product in Inventory first.");
+      return;
+    }
 
-        <div className="flex items-center gap-4 bg-white px-5 py-3 rounded-2xl border border-slate-200 shadow-sm">
-          <div className="text-right">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Cumulative Revenue</p>
-            <p className="text-xl font-bold text-emerald-600">${sales.reduce((acc, s) => acc + s.totalValue, 0).toLocaleString()}</p>
+    const price = product.price || 100;
+    const qty = Number(orderQuantity) || 1;
+    const total = price * qty;
+    const cust = customers.find(c => c.id === selectedCustomer) || customers[0];
+
+    onAddSalesOrder({
+      customerId: cust?.id || 'cust-1',
+      customerName: cust?.name || 'Valorniq Client',
+      items: [{
+        productId: product.id,
+        productName: product.name,
+        quantity: qty,
+        price: price
+      }],
+      totalValue: total,
+      status: 'confirmed',
+      orderDate: new Date().toISOString().split('T')[0]
+    });
+
+    setIsAddingOrder(false);
+  };
+
+  const totalCumulativeSales = sales.reduce((acc, s) => acc + (s.totalValue || 0), 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 py-2 border-b border-[#222] pb-4">
+        <div>
+          <h2 className="text-2xl font-medium tracking-tight text-white">Sales Orders & Fulfillment</h2>
+          <p className="text-xs text-[#888] mt-1">
+            Confirmed commercial transactions, order fulfillment tracking, and packing manifests.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="text-right hidden sm:block">
+            <p className="text-[10px] font-bold text-[#666] uppercase tracking-wider">Total Sales Billed</p>
+            <p className="text-lg font-mono font-medium text-emerald-400">${totalCumulativeSales.toLocaleString()}</p>
           </div>
-          <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
-            <ShoppingBag className="w-5 h-5" />
-          </div>
+          <button 
+            onClick={() => setIsAddingOrder(true)}
+            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-lg shadow-indigo-900/20 transition cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            New Sales Order
+          </button>
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 transition-all focus-within:border-indigo-300">
-        <Search className="w-4 h-4 text-slate-400 ml-2" />
-        <input 
-          id="search-orders"
-          type="text" 
-          placeholder="Filter orders by customer identity or serial #..." 
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-slate-700 outline-none"
-        />
+      <div className="flex flex-col md:flex-row gap-3">
+        <div className="flex-1 bg-[#111] p-2.5 rounded-xl border border-[#222] shadow-sm flex items-center gap-3">
+          <Search className="h-4 w-4 text-[#555] ml-2" />
+          <input 
+            type="text" 
+            placeholder="Filter orders by customer identity or order number..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="flex-1 bg-transparent border-none focus:outline-none text-xs text-white placeholder-[#555]"
+          />
+        </div>
+        <div className="flex bg-[#111] border border-[#222] p-1 rounded-xl">
+           {(['all', 'draft', 'confirmed', 'shipped', 'cancelled'] as const).map(s => (
+             <button 
+               key={s}
+               onClick={() => setStatusFilter(s)}
+               className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer ${
+                 statusFilter === s ? 'bg-[#222] text-white shadow-sm' : 'text-[#666] hover:text-[#AAA]'
+               }`}
+             >
+               {s}
+             </button>
+           ))}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredSales.map((order) => (
-          <motion.div 
-            key={order.id}
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl transition-all cursor-pointer relative group overflow-hidden"
-          >
-            <div className="flex justify-between items-start mb-6">
-              <div className="space-y-1">
-                <p className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">ORDER SEC-{order.id.slice(0,6).toUpperCase()}</p>
-                <h4 className="font-bold text-lg text-slate-900 leading-tight">{getCustomerName(order.customerId)}</h4>
-              </div>
-              <div className={`p-2 rounded-xl ${
-                order.status === 'confirmed' ? 'bg-emerald-50 text-emerald-600' :
-                order.status === 'shipped' ? 'bg-indigo-50 text-indigo-600' :
-                order.status === 'cancelled' ? 'bg-rose-50 text-rose-600' :
-                'bg-slate-50 text-slate-600'
-              }`}>
-                {order.status === 'confirmed' ? <CheckCircle2 className="w-5 h-5" /> :
-                 order.status === 'shipped' ? <ShoppingBag className="w-5 h-5" /> :
-                 order.status === 'cancelled' ? <XCircle className="w-5 h-5" /> :
-                 <Clock className="w-5 h-5" />}
-              </div>
-            </div>
-
-            <div className="space-y-3 pt-4 border-t border-slate-100 mb-8">
-              {order.items.slice(0, 2).map((item, idx) => (
-                <div key={idx} className="flex justify-between text-xs items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-slate-200" />
-                    <span className="text-slate-600 font-medium">{products.find(p => p.id === item.productId)?.name || 'Line Item'} (x{item.quantity})</span>
-                  </div>
-                  <span className="font-mono font-bold text-slate-900">${(item.price * item.quantity).toLocaleString()}</span>
-                </div>
-              ))}
-              {order.items.length > 2 && (
-                <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-widest pl-3">+{order.items.length - 2} Additional Items</p>
-              )}
-            </div>
-
-            <div className="flex justify-between items-end">
-              <div className="space-y-0.5">
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Verification Status</p>
-                <p className="text-xs font-bold text-slate-900 capitalize">{order.status}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Total Value</p>
-                <p className="text-2xl font-bold text-slate-900 font-mono">${order.totalValue.toLocaleString()}</p>
-              </div>
-            </div>
-
-            <div className="absolute inset-x-0 bottom-0 p-4 opacity-0 group-hover:opacity-100 transition-all flex justify-center translate-y-8 group-hover:translate-y-0 duration-500 bg-gradient-to-t from-white via-white/95 to-transparent pt-12">
-               <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDownloadManifest(order);
-                }}
-                className="bg-slate-900 text-white text-[10px] font-bold uppercase tracking-widest px-6 py-3 rounded-xl flex items-center gap-2 shadow-2xl active:scale-95 transition-all"
-               >
-                 <FileText className="w-3.5 h-3.5 text-indigo-400" />
-                 Download Manifest
-               </button>
-            </div>
-          </motion.div>
-        ))}
-
-        {filteredSales.length === 0 && (
-          <div className="col-span-full py-40 text-center flex flex-col items-center">
-            <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-8 border border-slate-100">
-              <ShoppingCart className="w-12 h-12 text-slate-200" />
-            </div>
-            <h3 className="text-xl font-bold text-slate-900">Vault Empty</h3>
-            <p className="text-slate-500 max-w-xs mx-auto text-xs mt-3 leading-relaxed font-medium uppercase tracking-wider">No transactional records detected in the current ledger.</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredSales.length === 0 ? (
+          <div className="col-span-full p-12 text-center text-[#666] border border-dashed border-[#222] rounded-xl bg-[#0F0F0F]">
+            <ShoppingBag className="h-8 w-8 mx-auto mb-2 text-[#444]" />
+            <p className="text-xs font-medium text-[#888]">No sales orders found</p>
+            <p className="text-[10px] text-[#666] mt-1">Create your first sales order using the button above.</p>
           </div>
+        ) : (
+          filteredSales.map((order) => (
+            <div 
+              key={order.id}
+              className="p-5 rounded-xl border border-[#222] bg-[#0F0F0F] text-[#d1d1d1] shadow-xl transition flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <span className="text-[9px] font-mono font-bold text-[#666] uppercase tracking-wider">
+                      ORD-{order.id.slice(0, 6).toUpperCase()}
+                    </span>
+                    <h4 className="font-medium text-sm text-white mt-0.5">
+                      {order.customerName || getCustomerName(order.customerId)}
+                    </h4>
+                  </div>
+                  <div className={`p-1.5 rounded-lg ${
+                    order.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400' :
+                    order.status === 'shipped' ? 'bg-indigo-500/10 text-indigo-400' :
+                    order.status === 'cancelled' ? 'bg-rose-500/10 text-rose-400' :
+                    'bg-[#1A1A1A] text-[#888]'
+                  }`}>
+                    {order.status === 'confirmed' ? <CheckCircle2 className="h-4 w-4" /> :
+                     order.status === 'shipped' ? <ShoppingBag className="h-4 w-4" /> :
+                     order.status === 'cancelled' ? <XCircle className="h-4 w-4" /> :
+                     <Clock className="h-4 w-4" />}
+                  </div>
+                </div>
+
+                <div className="space-y-2 py-3 border-t border-[#222] text-xs">
+                  {order.items.map((item, idx) => (
+                    <div key={idx} className="flex justify-between text-[11px]">
+                      <span className="text-[#AAA] truncate max-w-[180px]">
+                        {item.productName || getProductName(item.productId)} (x{item.quantity})
+                      </span>
+                      <span className="font-mono font-medium text-white">
+                        ${(item.price * item.quantity).toLocaleString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-[#222] flex items-end justify-between">
+                <div>
+                  <span className="text-[10px] text-[#666] block">Status</span>
+                  <select
+                    value={order.status}
+                    onChange={(e) => onUpdateOrderStatus(order.id, e.target.value as SalesOrder['status'])}
+                    className="bg-[#141414] border border-[#222] rounded px-2 py-0.5 text-indigo-400 font-medium text-xs focus:outline-none cursor-pointer capitalize mt-0.5"
+                  >
+                    <option value="draft" className="bg-[#141414] text-white">Draft</option>
+                    <option value="confirmed" className="bg-[#141414] text-white">Confirmed</option>
+                    <option value="shipped" className="bg-[#141414] text-white">Shipped</option>
+                    <option value="cancelled" className="bg-[#141414] text-white">Cancelled</option>
+                  </select>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-[#666] block">Total</span>
+                  <span className="text-base font-medium font-mono text-emerald-400">
+                    ${(order.totalValue || 0).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => handleDownloadManifest(order)}
+                className="mt-3 w-full py-1.5 rounded-lg border border-[#333] bg-[#1A1A1A] hover:bg-[#222] text-[10px] font-medium text-[#d1d1d1] flex items-center justify-center gap-1.5 cursor-pointer transition"
+              >
+                <FileText className="h-3 w-3 text-indigo-400" />
+                Download Packing Manifest
+              </button>
+            </div>
+          ))
         )}
       </div>
+
+      {/* MODAL: Create Order */}
+      {isAddingOrder && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md p-6 rounded-xl shadow-2xl space-y-4 bg-[#0F0F0F] border border-[#222] text-[#d1d1d1]">
+            <div className="flex items-center justify-between border-b border-[#222] pb-3">
+              <h3 className="font-medium text-sm text-white">Create Sales Order</h3>
+              <button 
+                onClick={() => setIsAddingOrder(false)}
+                className="p-1 hover:bg-[#1A1A1A] text-[#888] hover:text-white rounded-lg transition"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleCreateOrderSubmit} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-[#666] text-[10px] uppercase font-bold mb-1">Customer</label>
+                <select
+                  value={selectedCustomer}
+                  onChange={(e) => setSelectedCustomer(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-[#222] bg-[#141414] text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors"
+                >
+                  {customers.length === 0 ? (
+                    <option value="default" className="bg-[#141414]">Default Client Account</option>
+                  ) : (
+                    customers.map(c => (
+                      <option key={c.id} value={c.id} className="bg-[#141414]">{c.name} ({c.email})</option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[#666] text-[10px] uppercase font-bold mb-1">Product Item</label>
+                <select
+                  value={selectedProduct}
+                  onChange={(e) => setSelectedProduct(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-[#222] bg-[#141414] text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors"
+                >
+                  {products.length === 0 ? (
+                    <option value="none" className="bg-[#141414]">No products in inventory</option>
+                  ) : (
+                    products.map(p => (
+                      <option key={p.id} value={p.id} className="bg-[#141414]">{p.name} — ${p.price} ({p.stock} in stock)</option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[#666] text-[10px] uppercase font-bold mb-1">Order Quantity</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={orderQuantity}
+                  onChange={(e) => setOrderQuantity(Number(e.target.value))}
+                  className="w-full p-2.5 rounded-lg border border-[#222] bg-[#141414] text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingOrder(false)}
+                  className="px-4 py-2 font-medium bg-[#1A1A1A] hover:bg-[#222] border border-[#333] rounded-lg text-[#d1d1d1] transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-lg shadow-indigo-900/20 cursor-pointer transition"
+                >
+                  Confirm Order
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
-};
-
-// View Component
-export default SalesView;
+}
